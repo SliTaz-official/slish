@@ -1,7 +1,7 @@
 #!/bin/sh
 #
-# SliSH - The SliTaz SHell on demand. No gettext this is a pure adim
-# mainly developpee for slish.in but who can be used by other projects.
+# SliSH - The SliTaz SHell on demand. No gettext this is a pure admin
+# mainly developed for slish.in but which can be used by other projects.
 #
 # Copyright (C) 2014 SliTaz GNU/Linux - BSD License
 # Author: Christophe Lincoln <pankso@slitaz.org>
@@ -33,7 +33,7 @@ $(boldify "Usage:") $(basename $0) [command] [--option]
 
 $(boldify "Commands:")
   info          Display paths, configs and some stats
-  setup         Setup SliSH server and users chroot
+  setup         Setup SliSH server and user chroot
   gen-chroot    Generate a new default or user chroot
   clean-chroot  Clean the chroot but skip home and root
   adduser       Add a user to the server with \$HOME in chroot
@@ -63,7 +63,7 @@ setup() {
 		echo "Setting up the $(basename $dir) directory..."
 		mkdir -p ${dir} && chown www.www ${dir}
 	done
-	# Activity log must be writtable by users
+	# Activity log must be writable by users
 	touch ${activity} && chmod 0666 ${activity}
 	echo "All done!"
 }
@@ -188,7 +188,7 @@ del_user() {
 gen_chroot() {
 	[ "$clean" ] && clean_chroot
 	if [ -d "$root/bin" ]; then
-		echo "A chroot already exist: Use -cc command or --clean option"
+		echo "A chroot already exists: Use -cc command or --clean option"
 		exit 1
 	fi
 	[ "$clean" ] || newline
@@ -267,7 +267,7 @@ case "$1" in
 			rm -rf ${queue}/${user}
 		done ;;
 	*)
-		# /usr/bin/slish is be exectue on login to chroot the user
+		# /usr/bin/slish is be executed on login to chroot the user
 		if [ -d "$root/home/$USER" ]; then
 			. ${people}/"$USER"/account.conf
 			log "Chrooting user: $USER"

@@ -2,7 +2,7 @@ SliSH - The SliTaz SHell on demand!
 ================================================================================
 
 
-	* Powerfull SliTaz SHell in a few minutes
+	* Powerful SliTaz SHell in a few minutes
 	* Simple online registration via CGI script
 	* Easy to create and maintain users chroot
 	* Host cmdline tool to handle users and chroot
@@ -12,10 +12,10 @@ Quickstart
 ----------
 Start by getting the latest code via SliTaz Hg repos:
 
-# hg clone http://hg.slitaz.orh/slish
+# hg clone http://hg.slitaz.org/slish
 # cd slish && make install
 
-Setup dierctories, a chroot and configure the system to chroot all 
+Setup directories, a chroot and configure the system to chroot all 
 SliSH users.
 
 # slish setup
