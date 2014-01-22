@@ -1,0 +1,281 @@
+#!/bin/sh
+#
+# SliSH - The SliTaz SHell on demand. No gettext this is a pure adim
+# mainly developpee for slish.in but who can be used by other projects.
+#
+# Copyright (C) 2014 SliTaz GNU/Linux - BSD License
+# Author: Christophe Lincoln <pankso@slitaz.org>
+#
+export LANG=en LC_ALL=en
+. /lib/libtaz.sh
+
+[ "$root" ] || root="/home/slish/chroot"
+people="$(dirname $root)/people"
+data="/usr/share/slish"
+logs="$(dirname $root)/logs"
+cache="$(dirname $root)/cache"
+activity="$logs/activity.log"
+queue="${cache}/signup-queue"
+domain="slish.in"
+
+# Basic chroot packages
+chrootpkgs="glibc-base slitaz-base-files ncursesw nano ytree busybox-slish
+tcc rhapsody"
+
+#
+# Functions
+#
+
+usage() {
+	cat << EOT
+
+$(boldify "Usage:") $(basename $0) [command] [--option]
+
+$(boldify "Commands:")
+  info          Display paths, configs and some stats
+  setup         Setup SliSH server and users chroot
+  gen-chroot    Generate a new default or user chroot
+  clean-chroot  Clean the chroot but skip home and root
+  adduser       Add a user to the server with \$HOME in chroot
+  deluser       Delete a SliSH user from server and chroot
+  
+$(boldify "Options:")
+  --root=       Set the path to the SliSH or user chroot
+  --clean       Clean the chroot before gen-chroot
+
+EOT
+}
+
+# Setup SliSH server
+setup() {
+	# Allow users to use the chroot command
+	if ! grep -q "^chroot =" /etc/busybox.conf; then
+		echo "Allowing all users to use: chroot"
+		echo 'chroot = ssx root.root' >> /etc/busybox.conf
+	fi 
+	# Gen a chroot if not yet done
+	if [ ! -d "$root" ]; then
+		echo "Creating a chroot environment..."
+		gen_chroot
+	fi
+	# Also used by the CGI web interface
+	for dir in ${people} ${cache} ${logs}; do
+		echo "Setting up the $(basename $dir) directory..."
+		mkdir -p ${dir} && chown www.www ${dir}
+	done
+	# Activity log must be writtable by users
+	touch ${activity} && chmod 0666 ${activity}
+	echo "All done!"
+}
+
+# Gen a user config file
+user_config() {
+	echo -n "Creating SliSH account configuration..."
+	mkdir -p ${people}/${user}
+	cat > ${people}/${user}/account.conf << EOT
+# SliSH account configuration
+
+NAME="$name"
+USER="$user"
+MAIL="$mail"
+
+ULIMIT="-d 4096 -m 4096 -l 32 -p 5 -v 16384"
+QUOTA=""
+
+EOT
+	chmod 0600 ${people}/${user}/account.conf
+	chown ${user}.${user} ${people}/${user}/account.conf
+	status
+}
+
+# Mail body.
+user_mail() {
+	cat << EOT
+From: SliSH <shell@${domain}>
+To: $mail
+Date: $(date '+%a, %d %b %Y %H:%M:%S %z')
+Subject: SliSH - Account created
+Content-Type: text/plain; charset=utf-8
+Content-Transfer-Encoding: 8bit
+
+Hi,
+
+Your custom SliTaz GNU/Linux SHell is ready to use! You can login with:
+
+$ ssh ${user}@${domain}
+
+Visit http://slish.in and http://www.slitaz.org for the latest news about
+both projects.
+
+Happy SliTaz :-)
+
+---
+Sent by the SliSH Mailer
+
+EOT
+}
+
+# Add a new SliSH user
+add_user() {
+	home="$root/home/$user"
+	shell="/usr/bin/slish"
+	
+	if grep -q ^${user}: /etc/passwd; then
+		newline
+		echo -n "User already exists: "; colorize 31 "$user"
+		newline && exit 0
+	fi
+	newline
+	echo -n "$(boldify 'Creating user:') "; colorize 32 "$user"
+	separator
+	echo -e "$pass\n$pass" | adduser -h "$home" -g "SliSH User" \
+		-s ${shell} ${user} >/dev/null
+	
+	# Add user to chroot /etc/passwd
+	if ! grep -q ^${user}: ${root}/etc/passwd; then
+		echo -n "Adding $user to: $root"
+		grep "^$user:" /etc/passwd >> ${root}/etc/passwd
+		grep "^$user:" /etc/group >> ${root}/etc/group
+		sed -i s"!$root!!" ${root}/etc/passwd
+		status
+	fi
+	
+	# We don't want any files from /etc/skel.
+	echo -n "Cleaning home and creating: ~/.ssh"
+	rm -rf ${home} && mkdir -p ${home}/.ssh
+	status
+	
+	# Let a web server access an eventual ~/Public dir
+	echo -n "Changing mode on user home..."
+	chown -R ${user}.${user} ${home}
+	chown ${user}.www ${home}
+	chmod 0750 ${home}
+	chmod 0700 ${home}/.ssh
+	status
+	user_config
+	# Send mail to notify user account creation
+	if [ -x /usr/sbin/sendmail ]; then
+		echo -n "Sending mail to: $mail"
+		user_mail | /usr/sbin/sendmail -f "shell@${domain}" "$mail"
+		status
+	fi
+	separator && newline
+}
+
+# Delete a SliSH user
+del_user() {
+	home="$root/home/$user"
+	if [ ! -d "$home" ] || [ ! "$user" ]; then
+		newline
+		echo "Missing --user= name option or invalid user name"
+		newline && exit 0
+	fi
+	newline
+	echo "$(boldify 'Deleting user:') $(colorize 32 "$user")"
+	separator
+	echo -n "Removing user account from: $(hostname) server"
+	deluser "$user"; status
+	sed -i "/^$user:/"d ${root}/etc/passwd
+	sed -i "/^$user:/"d ${root}/etc/group
+	echo -n "Removing all files in : $home"
+	rm -rf ${home} ; status
+	echo -n "Removing user config  : $people/$user"
+	rm -rf "${people}/${user}" ; status
+	separator && newline
+}
+
+# Create a minimal chroot environment
+gen_chroot() {
+	[ "$clean" ] && clean_chroot
+	if [ -d "$root/bin" ]; then
+		echo "A chroot already exist: Use -cc command or --clean option"
+		exit 1
+	fi
+	[ "$clean" ] || newline
+	boldify "Creating chroot in: $root"
+	separator
+	mkdir -p ${root}
+	for pkg in ${chrootpkgs}
+	do
+		echo -n "Installing: $pkg"
+		tazpkg -gi ${pkg} --root=${root} >/dev/null
+		status
+	done
+	echo -n "Installing: /bin/slish.sh"
+	install -m 0755 ${data}/slish.sh ${root}/bin
+	cp -a /etc/resolv.conf ${root}/etc
+	status
+	separator && newline
+}
+
+# Clean up a chroot environment
+clean_chroot() {
+	if [ ! -d "$root/bin" ]; then
+		echo "No chroot found in: $root" && exit 0
+	fi
+	newline
+	boldify "Cleaning: $root"
+	separator
+	cd ${root}
+	for dir in *
+	do
+		size=$(du -sh $dir | awk '{print $1}')
+		case "$dir" in
+			etc|home|root|lost*) continue ;;
+			*)
+				echo -n "Removing: $dir $size"
+				rm -rf ${dir} ; status ;;
+		esac
+	done && separator && newline
+}
+
+#
+# Handle commands
+#
+
+case "$1" in
+	-i|info)
+		check_root
+		echo -n "Chroot size : " && du -sh ${root} 
+		echo -n "Users count : " && ls -1 ${people} | wc -l ;;
+	setup)
+		check_root
+		setup ;;
+	adduser)
+		check_root
+		add_user ;;
+	deluser)
+		check_root
+		del_user ;;
+	-gc|gen-chroot)
+		check_root
+		gen_chroot ;;
+	-cc|clean-chroot)
+		check_root
+		clean_chroot ;;
+	-c|chroot)
+		echo "Chrooting to: $root"
+		chroot ${root} /bin/sh
+		echo "Exiting from: $root" ;;
+	-cq|check-queue)
+		# Check online registration queue
+		for user in $(ls ${queue})
+		do
+			. ${queue}/${user}/account.conf
+			pass=$(cat ${queue}/${user}/passwd | base64 -d)
+			add_user
+			rm -rf ${queue}/${user}
+		done ;;
+	*)
+		# /usr/bin/slish is be exectue on login to chroot the user
+		if [ -d "$root/home/$USER" ]; then
+			. ${people}/"$USER"/account.conf
+			log "Chrooting user: $USER"
+			ulimit $(echo "$ULIMIT")
+			exec chroot $root /bin/slish.sh "$@"
+		else
+			usage
+		fi ;;
+esac
+
+exit 0
