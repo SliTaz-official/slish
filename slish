@@ -18,7 +18,7 @@ activity="$logs/activity.log"
 queue="${cache}/signup-queue"
 domain="slish.in"
 
-# Basic chroot packages
+# Default chroot packages
 chrootpkgs="glibc-base slitaz-base-files ncursesw nano ytree busybox-slish
 tcc rhapsody"
 
@@ -38,10 +38,13 @@ $(boldify "Commands:")
   clean-chroot  Clean the chroot but skip home and root
   adduser       Add a user to the server with \$HOME in chroot
   deluser       Delete a SliSH user from server and chroot
+  list-queue    List users in the signup queue
+  chroot        Chroot to SliSH users default chroot
   
 $(boldify "Options:")
   --root=       Set the path to the SliSH or user chroot
   --clean       Clean the chroot before gen-chroot
+  --queued      Add all users from the signup queue
 
 EOT
 }
@@ -68,6 +71,19 @@ setup() {
 	echo "All done!"
 }
 
+# Show user configs
+show_queued_user() {
+	. ${queue}/${user}/account.conf
+	newline
+	separator
+	cat << EOT
+User : $user
+Name : $name
+Mail : $mail
+EOT
+	separator
+}
+
 # Gen a user config file
 user_config() {
 	echo -n "Creating SliSH account configuration..."
@@ -80,7 +96,7 @@ USER="$user"
 MAIL="$mail"
 
 ULIMIT="-d 4096 -m 4096 -l 32 -p 5 -v 16384"
-QUOTA=""
+QUOTA="50"
 
 EOT
 	chmod 0600 ${people}/${user}/account.conf
@@ -123,8 +139,10 @@ add_user() {
 	if grep -q ^${user}: /etc/passwd; then
 		newline
 		echo -n "User already exists: "; colorize 31 "$user"
-		newline && exit 0
+		rm -rf ${queue}/${user}
+		newline && exit 1
 	fi
+	
 	newline
 	echo -n "$(boldify 'Creating user:') "; colorize 32 "$user"
 	separator
@@ -153,6 +171,7 @@ add_user() {
 	chmod 0700 ${home}/.ssh
 	status
 	user_config
+	
 	# Send mail to notify user account creation
 	if [ -x /usr/sbin/sendmail ]; then
 		echo -n "Sending mail to: $mail"
@@ -160,6 +179,17 @@ add_user() {
 		status
 	fi
 	separator && newline
+}
+
+# Add all users from the signup queue
+add_queued_user() {
+	for user in $(ls ${queue})
+	do
+		. ${queue}/${user}/account.conf
+		pass=$(cat ${queue}/${user}/passwd | base64 -d)
+		add_user
+		rm -rf ${queue}/${user}
+	done
 }
 
 # Delete a SliSH user
@@ -234,16 +264,33 @@ clean_chroot() {
 #
 
 case "$1" in
-	-i|info)
+	info)
 		check_root
-		echo -n "Chroot size : " && du -sh ${root} 
-		echo -n "Users count : " && ls -1 ${people} | wc -l ;;
+		newline
+		boldify "Info"
+		separator
+		echo -n "Chroot size    : " && du -sh ${root} 
+		echo -n "Users accounts : " && ls -1 ${people} | wc -l
+		echo -n "Signup queue   : " && ls -1 ${queue} | wc -l
+		separator && newline ;;
+	last)
+		check_root
+		newline
+		boldify "Last users"
+		separator
+		tac ${activity} | head -n 20
+		separator && newline ;;
 	setup)
 		check_root
 		setup ;;
 	adduser)
+		# We can adduser from cmdline or from the signup queue
 		check_root
-		add_user ;;
+		if [ "$from-queu" ]; then
+			add_queued_user
+		else
+			add_user
+		fi ;;
 	deluser)
 		check_root
 		del_user ;;
@@ -257,22 +304,20 @@ case "$1" in
 		echo "Chrooting to: $root"
 		chroot ${root} /bin/sh
 		echo "Exiting from: $root" ;;
-	-cq|check-queue)
-		# Check online registration queue
-		for user in $(ls ${queue})
+	-lq|list-queue)
+		# Check online signup queue but do nothing
+		for user in $(ls ${queued})
 		do
-			. ${queue}/${user}/account.conf
-			pass=$(cat ${queue}/${user}/passwd | base64 -d)
-			add_user
-			rm -rf ${queue}/${user}
-		done ;;
+			show_queued_user
+		done 
+		echo "" ;;
 	*)
-		# /usr/bin/slish is be executed on login to chroot the user
+		# /usr/bin/slish is executed on login to chroot the user
 		if [ -d "$root/home/$USER" ]; then
 			. ${people}/"$USER"/account.conf
 			log "Chrooting user: $USER"
 			ulimit $(echo "$ULIMIT")
-			exec chroot $root /bin/slish.sh "$@"
+			exec chroot ${root} /bin/slish.sh "$@"
 		else
 			usage
 		fi ;;
