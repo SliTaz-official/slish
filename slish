@@ -20,7 +20,7 @@ domain="slish.in"
 
 # Default chroot packages
 chrootpkgs="glibc-base slitaz-base-files ncursesw nano ytree busybox-slish
-tcc rhapsody"
+rhapsody tcc glibc-dev lua tinypy"
 
 #
 # Functions
