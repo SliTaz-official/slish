@@ -107,7 +107,7 @@ EOT
 }
 
 # Mail body.
-user_mail() {
+mail_new_account() {
 	cat << EOT
 From: SliSH <shell@${domain}>
 To: $mail
@@ -177,7 +177,7 @@ add_user() {
 	# Send mail to notify user account creation
 	if [ -x /usr/sbin/sendmail ]; then
 		echo -n "Sending mail to: $mail"
-		user_mail | /usr/sbin/sendmail -f "shell@${domain}" "$mail"
+		mail_new_account | /usr/sbin/sendmail -f "shell@${domain}" "$mail"
 		status
 	fi
 	separator && newline
@@ -320,7 +320,7 @@ case "$1" in
 		echo "Exiting from: $root" ;;
 	-lq|list-queue)
 		# Check online signup queue but do nothing
-		for user in $(ls ${queued})
+		for user in $(ls ${queue})
 		do
 			show_queued_user
 		done 
