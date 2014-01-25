@@ -33,7 +33,7 @@ $(boldify "Usage:") $(basename $0) [command] [--option]
 
 $(boldify "Commands:")
   info          Display paths, configs and some stats
-  last          Show last chroted users
+  last          Show last chrooted users
   users         List all users with name and mail
   setup         Setup SliSH server and user chroot
   gen-chroot    Generate a new default or user chroot
