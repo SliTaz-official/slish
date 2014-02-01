@@ -70,7 +70,7 @@ setup() {
 	done
 	# Activity log must be writable by users
 	touch ${activity} && chmod 0666 ${activity}
-	# Add /usr/bin/slish to /etc/shells (dropbear need it)
+	# Add /usr/bin/slish to /etc/shells (dropbear needs it)
 	if ! fgrep -q '/usr/bin/slish' /etc/shells; then
 		echo "Adding /bin/slish to the list of valid shells..."
 		echo '/usr/bin/slish' >> /etc/shells
@@ -151,7 +151,7 @@ add_user() {
 		newline && exit 0
 	fi
 	
-	# Exit if user already exist
+	# Exit if user already exists
 	if grep -q ^${user}: /etc/passwd; then
 		newline
 		echo -n "User already exists: "; colorize 31 "$user"
